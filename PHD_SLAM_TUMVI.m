@@ -3,8 +3,7 @@ clear
 clc
 
 addpath /home/lagerprocessor/Projects/PHD-SLAM-TUMVI/libviso2/matlab;
-v = VideoWriter('newfile.avi');
-v.Quality = 95;
+
 %% Select data set
 path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
@@ -41,10 +40,10 @@ dt_vec = horzcat(dt_vec, mean(dt_vec)); % Pad the end to make vector same size
 depth_factor = 5000; % Metric Z range = depth[v,u]/depth_factor
 
 %% Libviso2 setup
-viso_param.f     = 191.0;
-viso_param.cu    = 254.9;
-viso_param.cv    = 256.8;
-viso_param.base  = 0.101;
+viso_param.f     = 96.8239926;
+viso_param.cu    = 247.70848004;
+viso_param.cv    = 255.31920479;
+viso_param.base  = 0.101039;
 
 % init visual odometry
 visualOdometryStereoMex('init',viso_param);
@@ -106,8 +105,6 @@ for kk = 1:size(elapsed_time,2)
         ', Matches: ' num2str(num_matches) ...
         ', Inliers: ' num2str(100*num_inliers/num_matches,'%.1f') ,' %']);
 
-    frame = getframe(gcf);
-    writeVideo(v,frame);
 
 end
 
