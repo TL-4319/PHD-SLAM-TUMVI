@@ -2,7 +2,8 @@ close all
 clear
 clc
 
-addpath /home/lagerprocessor/Projects/PHD-SLAM-TUMVI/libviso2/matlab;
+addpath libviso2/matlab/;
+
 
 %% Select data set
 path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
@@ -45,30 +46,42 @@ viso_param.cu    = 247.70848004;
 viso_param.cv    = 255.31920479;
 viso_param.base  = 0.101039;
 
+%% These parameter changes are still to be tested to see if they improve tracking
+%viso_param.ransac_iters = 200;
+viso_param.max_features = 1000;
+viso_param.bucket_width = 10;
+viso_param.bucket.bucket_height = 10;
+
+
 % init visual odometry
 visualOdometryStereoMex('init',viso_param);
 
 % init transformation matrix array
 Tr_total{1} = eye(4);
+Tr_his{1} = eye(4);
 
 % create figure
-figure('Color',[1 1 1]);
-ha1 = axes('Position',[0.05,0.7,0.3,0.3]);
+f = figure('Color',[1 1 1]);
+f.Position = [0, 0, 700, 1000];
+ha1 = axes('Position',[0.25,0.6,0.5,0.4]);
 axis off;
-ha2 = axes('Position',[0.05,0.05,0.5,0.5]);
-set(gca,'XTick',-50:1:50);
-set(gca,'YTick',-50:1:50);
+ha2 = axes('Position',[0.0,0.05,1,0.5]);
+set(gca,'XTick',-10:1:10);
+set(gca,'YTick',-10:1:10);
 axis equal, grid on, hold on;
 
 %% Filter configuration
 
 
 
+%% Misc
+runtime = 0;
+
 %% Run loop
-open(v)
 for kk = 1:size(elapsed_time,2)
     %% Read images
     % Read greyscale RGB image
+    tic
     left_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam0/rectified/',name_array(kk,:),'.png');
     left_rectified_img = imread(left_rectified_name);
     right_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam1/rectified/',name_array(kk,:),'.png');
@@ -82,15 +95,17 @@ for kk = 1:size(elapsed_time,2)
     %% LIBVISO2 for visual odometry
     % compute and accumulate egomotion
     Tr = visualOdometryStereoMex('process',left_rectified_img,right_rectified_img);
+
     if kk>1
       Tr_total{kk} = Tr_total{kk-1}*inv(Tr);
+      Tr_his{kk} = Tr;
     end
 
       % update image
     axes(ha1); cla;
     imagesc(left_rectified_img); colormap(gray);
     axis off;
-  
+
     % update trajectory
     axes(ha2);
     if kk>1
@@ -98,16 +113,35 @@ for kk = 1:size(elapsed_time,2)
             [Tr_total{kk-1}(3,4) Tr_total{kk}(3,4)],'-xb','LineWidth',1);
     end
     pause(0.05); refresh;
-     % output statistics
-    num_matches = visualOdometryStereoMex('num_matches');
-    num_inliers = visualOdometryStereoMex('num_inliers');
+     %output statistics
+     num_matches = visualOdometryStereoMex('num_matches');
+     num_inliers = visualOdometryStereoMex('num_inliers');
     disp(['Frame: ' num2str(kk) ...
-        ', Matches: ' num2str(num_matches) ...
-        ', Inliers: ' num2str(100*num_inliers/num_matches,'%.1f') ,' %']);
-
+         ', Matches: ' num2str(num_matches) ...
+         ', Inliers: ' num2str(100*num_inliers/num_matches,'%.1f') ,' %']);
+    %exportgraphics(gcf,'testAnimated.gif','Append',true);
+    
+    runtime = horzcat(runtime,toc);
 
 end
 
+axes(ha1); cla;
+    imagesc(left_rectified_img); colormap(gray);
+    axis off;
+
+    % update trajectory
+    axes(ha2);
+    for kk = 1:size(elapsed_time,2)
+        if kk>1
+            plot([Tr_total{kk-1}(1,4) Tr_total{kk}(1,4)], ...
+                [Tr_total{kk-1}(3,4) Tr_total{kk}(3,4)],'-xb','LineWidth',1);
+        end
+    end
+    pause(0.05); refresh;
 
 % release visual odometry
 visualOdometryStereoMex('close');
+
+figure()
+plot (runtime)
+
