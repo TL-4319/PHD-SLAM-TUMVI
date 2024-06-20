@@ -1,2 +1,8 @@
 # Ignore dataset
 dataset/
+
+# Ignore temporary matlab files
+*.asv
+
+# Ignore output gifs
+*.gif
