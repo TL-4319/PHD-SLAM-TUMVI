@@ -6,6 +6,10 @@ addpath libviso2/matlab/;   % Libviso
 addpath util/;              % Utility functions
 addpath ssc/;               % ANMS 
 
+%% Plotting 
+fig1 = figure(1);
+title ("Visualization")
+fig1.Position = [1,1,2000,2000];
 
 %% Select data set
 path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
@@ -41,9 +45,11 @@ dt_vec = horzcat(dt_vec, mean(dt_vec)); % Pad the end to make vector same size
 dt = mean(dt_vec);
 
 %% Camera and hardware configuration
-depth_factor = 5000; % Metric Z range = depth[v,u]/depth_factor
+% deoth_factor needs to match with whatever is used as depth factor in
+% stereo matching script. This is not needed if the stereo camera returns the depth in metric scale 
+depth_factor = 5000; % Metric Z range = depth[v,u]/depth_factor 
 
-% CV coordinate to NED
+% CV coordinate to NED - This is by definition
 Tr_camera_to_NED = eye(4);
 Tr_camera_to_NED(1:3,1:3) = [0 1 0; 
                              0 0 1;
@@ -97,6 +103,7 @@ truth_dcm_cam0_ned = truth_pose_cam0_ned(1:3,1:3,:);
 truth_quat_cam0_ned = quaternion(truth_dcm_cam0_ned,"rotmat","point");
 
 %% Libviso2 setup
+% Obtained these from the projection matrix calculation
 viso_param.f     = 96.8239926;
 viso_param.cu    = 247.70848004;
 viso_param.cv    = 255.31920479;
@@ -160,7 +167,7 @@ for kk = 1:size(elapsed_time,2)
 
     % ANMS
     % Sort features via their hessian corner metric
-    if num_valid_points > ANMS_max_num_point - 1    %Only do ANMS if we have more points than ANMS max num point. If not, SSC seg fault
+    if num_valid_points > ANMS_max_num_point + 2    %Only do ANMS if we have more points than ANMS max num point. If not, SSC seg fault
         [~,sort_ind] = sort(valid_depth_corners.Metric, 'descend');
         sorted_points = valid_depth_corners(sort_ind);
     
@@ -172,10 +179,13 @@ for kk = 1:size(elapsed_time,2)
     end
     num_selected_point = selected_corners.Count;
     selected_depth_pixel = selected_corners.Location;
-
-    % Reprojection
+    
+    %% Reprojection
     % Create measurement set. NED metric position of corners relative to
     % camera. Depth is corresponding to North or X axis
+
+    % MAROUN - Here is the step where I convert the measurement from2D
+    % images to 3D points where NED convention matters for PHD-SLAM
     meas_ned = zeros(3,num_selected_point);
     for ii = 1:num_selected_point
         % NED X axis / North / camera Z axis
@@ -199,20 +209,39 @@ for kk = 1:size(elapsed_time,2)
     % pose
     libviso_transformation_mat = visualOdometryStereoMex('process',left_rectified_img,right_rectified_img);
 
-    % if kk>1
-    %   Tr_total{kk} = Tr_total{kk-1}*inv(Tr);
-    %   Tr_his{kk} = Tr;
-    % end
-
+    % MAROUN - This is the conversion from libviso to odometry to use with
+    % SLAM
     % Convert relative transformation matrix into PHD-SLAM odometry
     relative_Tr_ned = Tr_NED_to_camera * pinv(libviso_transformation_mat) * Tr_camera_to_NED;
     [trans_vel_ned, rot_vel_ned] = transformation_to_odom(relative_Tr_ned, dt);
     
     %% PHD-SLAM1
+    % PHD-SLAM goes here just like the simulations
 
-    %% Plotting
-    % Visualize trajectory
+    %% Plotting 
+    % Grey image
     figure(1)
+    subplot (2,2,1)
+    imshow(horzcat(left_rectified_img,right_rectified_img))
+    hold on
+    plot (selected_corners)
+    hold off
+    xlabel("Rectified stereo image")
+
+    % Depth map
+    subplot (2,2,3)
+    imagesc(depth_map)
+    clim([0 6])
+    cb = colorbar(); 
+    ylabel(cb,'Depth (m)','FontSize',10,'Rotation',270)
+    hold on 
+    plot (selected_corners)
+    hold off
+    xlabel("Depth map")
+    axis equal
+    
+    % Trajectory
+    subplot_traj = subplot(2,2,[2,4]);
     draw_trajectory(truth_pos_cam0_ned(:,kk), truth_quat_cam0_ned(kk,:), truth_pos_cam0_ned(:,1:kk), 1, 0.4, 2,'k',false, true);
     % Global ref
     draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
@@ -227,23 +256,8 @@ for kk = 1:size(elapsed_time,2)
     xlim([-5 5]);
     ylim([-5 5]);
     zlim([-1 4]);
-    %drawnow;
-    
-    % Grey image
-    figure(2)
-    imshow(left_rectified_img)
-    hold on
-    plot (selected_corners)
-    hold off
 
-    % Depth map
-    figure(3)
-    imagesc(depth_map)
-    clim([0 6])
-    colorbar
-    hold on 
-    plot (selected_corners)
-    hold off
+    exportgraphics(gcf,'viz.gif','Append',true);
 
 
     
