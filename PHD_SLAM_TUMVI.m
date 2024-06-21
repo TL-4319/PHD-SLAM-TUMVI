@@ -102,6 +102,10 @@ truth_pos_cam0_ned = reshape(truth_pose_cam0_ned(1:3,4,:),3,[]);
 truth_dcm_cam0_ned = truth_pose_cam0_ned(1:3,1:3,:);
 truth_quat_cam0_ned = quaternion(truth_dcm_cam0_ned,"rotmat","point");
 
+% Data struct to store truth
+truth.pos = truth_pos_cam0_ned;
+truth.quat = truth_quat_cam0_ned;
+
 %% Libviso2 setup
 % Obtained these from the projection matrix calculation
 viso_param.f     = 96.8239926;
@@ -119,90 +123,103 @@ viso_param.bucket.bucket_height = 10;
 % init visual odometry
 visualOdometryStereoMex('init',viso_param);
 
-%% Pre process parameters
-max_depth_m = 5; 
+% Data struct to store odometry
+odom.transformation_matrix = zeros(4,4,size(time_vec,2));
+odom.transformation_matrix(:,:,1) = truth_pose_cam0_ned(:,:,1);
+odom.pos = zeros(3,size(time_vec,2));
+odom.pos(:,1) = truth.pos(:,1);
+odom.quat = quaternion(zeros(size(time_vec,2),4));
+odom.quat(1,:) = truth.quat(1,:);
 
-ANMS_max_num_point = 100;
-ANMS_tolerance = 0.1;
+%% Pre process parameters
+% FAST detector
+FAST_params.ROI = [33 1 512-33 512]; % Crop the portion of the image to not run FAST detector. This portion corresponds to area that stereo matching is invalid
+FAST_params.min_quality = 0.05;
+FAST_params.min_contrast = 0.05;
+
+% ANMS 
+ANMS_params.max_num_point = 100;
+ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
+% Data struct to store data
+filter.pos = zeros(3,size(time_vec,2));
+filter.quat = quaternion(zeros(size(time_vec,2),4));
+filter.num_effective_particle = zeros(1,size(time_vec,2));
+
+% Filter settings
+filter.num_particle = 1;
+
+% Motion covariance = [cov_x, cov_y, cov_z, cov_phi, cov_theta, cov_psi]
+filter.motion_sigma = [0.1; 0.1; 0.1; 0.03; 0.03; 0.03];
 
 
+
+% Sensor model
+filter.sensor_HFOV = deg2rad(110);
+filter.sensor_VFOV = deg2rad(110);
+filter.sensor_max_range = 15;
+filter.sensor_min_range = 0.4;
+filter.filter_sensor_noise_std = 0.1;
+filter.R = diag([filter.filter_sensor_noise_std^2, ...
+    filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
+filter.clutter_intensity = 2 / (15^2 * pi);
+filter.detection_prob = 0.9;
+
+% Map PHD config
+filter.birthGM_intensity = 0.1;
+filter.birthGM_cov = [0.1, 0, 0; 0, 0.1, 0; 0, 0, 0.1];
+filter.map_Q = diag([0.01, 0.01, 0.01].^2);
+
+
+% PHD GM management parameters
+filter.pruning_thres = 10^-6;
+filter.merge_dist = 10;
+filter.num_GM_cap = 200;
 
 %% Misc
 runtime = 0;
 
 %% Initialize filter
+% Set intial pose
+filter.pos(:,1) = truth.pos(:,1);
+filter.quat(1,:) = truth.quat(1,:);
 
+% Use measurement from timestep 1 to initialize map
+[left_rectified_img, right_rectified_img, depth_map] = ...
+    get_images(path_to_dataset, dataset_name, name_array(1,:), depth_factor);
+
+% Preprocess image to generate measurement sets
+[measurements_ned, ~, ~] = detect_and_project (left_rectified_img,...
+    depth_map, FAST_params, ANMS_params, camera_intrinsic);
+
+% Reproject measurements to world frame for testing
+meas_in_world = reproject_meas(filter.pos(:,1),...
+    filter.quat(1,:), measurements_ned);
+
+particles = initialize_particles (filter.num_particle, filter.pos(:,1), filter.quat(1,:), ...
+    meas_in_world, filter.birthGM_cov, filter.birthGM_intensity);
+
+
+%%
+frame = cell(size(time_vec,2)-1);
+tic
 
 %% Run loop
-for kk = 1:size(elapsed_time,2)
+for kk = 2:size(time_vec,2)
     %% Read images and pre-processing
-    % Read greyscale RGB image
+    % Read greyscale and depth images
     tic
-    left_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam0/rectified/',name_array(kk,:),'.png');
-    left_rectified_img = imread(left_rectified_name);
-    right_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam1/rectified/',name_array(kk,:),'.png');
-    right_rectified_img = imread(right_rectified_name);
-
-    % Read depthmap
-    depth_name = strcat(path_to_dataset,dataset_name,'/mav0/depth/data/',name_array(kk,:),'.png');
-    depth_img = imread(depth_name);
-    depth_map = double(depth_img)/depth_factor; % Convert from uint16 depth image to metric depth map (values are in meters)
+    [left_rectified_img, right_rectified_img, depth_map] = ...
+        get_images(path_to_dataset, dataset_name, name_array(kk,:), depth_factor);
     
-    % Fast corner detection
-    FAST_ROI = [33 1 512-33 512]; % Crop the portion of the image to not run FAST detector. This portion corresponds to area that stereo matching is invalid
-    FAST_corners = detectFASTFeatures(left_rectified_img, ...
-        'MinQuality',0.05, 'MinContrast', 0.05, 'ROI', FAST_ROI);
-    num_FAST_points = FAST_corners.Count;
-    
-    % Depth map validation
-    depth_val = zeros(1,FAST_corners.Count);
-    for j = 1:num_FAST_points
-        depth_val(j) = depth_map(FAST_corners.Location(j,2),FAST_corners.Location(j,1));
-    end
-    [~, depth_valid_ind] = find(depth_val ~= 0);
-    valid_depth_corners = FAST_corners (depth_valid_ind);
-    num_valid_points = valid_depth_corners.Count;
-
-    % ANMS
-    % Sort features via their hessian corner metric
-    if num_valid_points > ANMS_max_num_point + 2    %Only do ANMS if we have more points than ANMS max num point. If not, SSC seg fault
-        [~,sort_ind] = sort(valid_depth_corners.Metric, 'descend');
-        sorted_points = valid_depth_corners(sort_ind);
-    
-        selected_idx = ssc(double(sorted_points.Location), ANMS_max_num_point, ...
-            ANMS_tolerance, size(left_rectified_img,2), size(left_rectified_img,1));
-        selected_corners = sorted_points((selected_idx+1)'); % +1 since matlab is one-indexed
-    else
-        selected_corners = valid_depth_corners;
-    end
-    num_selected_point = selected_corners.Count;
-    selected_depth_pixel = selected_corners.Location;
-    
-    %% Reprojection
-    % Create measurement set. NED metric position of corners relative to
-    % camera. Depth is corresponding to North or X axis
-
-    % MAROUN - Here is the step where I convert the measurement from2D
-    % images to 3D points where NED convention matters for PHD-SLAM
-    meas_ned = zeros(3,num_selected_point);
-    for ii = 1:num_selected_point
-        % NED X axis / North / camera Z axis
-        meas_ned(1,ii) = depth_map(selected_depth_pixel(ii,2),selected_depth_pixel(ii,1));
-        
-        % NED Y axis / East / camera X axis
-        meas_ned(2,ii) = (selected_depth_pixel(ii,1) - camera_intrinsic.cu) * ...
-            meas_ned(1,ii) / camera_intrinsic.f;
-        
-        % NED Z axis / Down / camera Y axis
-        meas_ned(3,ii) = (selected_depth_pixel(ii,2) - camera_intrinsic.cv) * ...
-            meas_ned(1,ii) / camera_intrinsic.f;
-    end
+    % Preprocess image to generate measurement sets
+    [measurements_ned, statistic, selected_corners] = detect_and_project (left_rectified_img,...
+    depth_map, FAST_params, ANMS_params, camera_intrinsic);
     
     % Reproject measurements to world frame for testing
     meas_in_world = reproject_meas(truth_pos_cam0_ned(:,kk),...
-        truth_quat_cam0_ned(kk,:), meas_ned);
+        truth_quat_cam0_ned(kk,:), measurements_ned);
 
     %% LIBVISO2 for visual odometry
     % compute relative transformation of current pose reference to prev
@@ -214,6 +231,13 @@ for kk = 1:size(elapsed_time,2)
     % Convert relative transformation matrix into PHD-SLAM odometry
     relative_Tr_ned = Tr_NED_to_camera * pinv(libviso_transformation_mat) * Tr_camera_to_NED;
     [trans_vel_ned, rot_vel_ned] = transformation_to_odom(relative_Tr_ned, dt);
+
+    % Propagate only the odometry - used for comparison only
+    odom.transformation_matrix(:,:,kk) = odom.transformation_matrix(:,:,kk-1) * ...
+        relative_Tr_ned;
+    odom.pos(:,kk) = reshape(odom.transformation_matrix(1:3,4,kk),3,[]);
+    temp_dcm = odom.transformation_matrix(1:3,1:3,kk);
+    odom.quat(kk,:) = quaternion(temp_dcm,"rotmat","point");
     
     %% PHD-SLAM1
     % PHD-SLAM goes here just like the simulations
@@ -246,7 +270,7 @@ for kk = 1:size(elapsed_time,2)
     % Global ref
     draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
     hold on
-    scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'k*')
+    scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'k.')
     axis equal
     grid on
     grid minor
@@ -258,7 +282,7 @@ for kk = 1:size(elapsed_time,2)
     zlim([-1 4]);
 
     exportgraphics(gcf,'viz.gif','Append',true);
-
+    frame{kk-1} = getframe(gcf);
 
     
 
@@ -273,6 +297,15 @@ for kk = 1:size(elapsed_time,2)
     runtime = horzcat(runtime,toc);
 
 end
+toc
+
+obj = VideoWriter("myvideo",'Uncompressed AVI');
+obj.FrameRate = 20;
+open(obj);
+for i=1:length(frame)
+    writeVideo(obj,frame{i})
+end
+obj.close();
 
 % release visual odometry
 visualOdometryStereoMex('close');
