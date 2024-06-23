@@ -133,57 +133,58 @@ odom.quat(1,:) = truth.quat(1,:);
 
 %% Pre process parameters
 % FAST detector
-FAST_params.ROI = [33 1 512-33 512]; % Crop the portion of the image to not run FAST detector. This portion corresponds to area that stereo matching is invalid
+FAST_params.ROI = [33 1 512-2*33 512]; % Crop the portion of the image to not run FAST detector. This portion corresponds to area that stereo matching is invalid
 FAST_params.min_quality = 0.05;
 FAST_params.min_contrast = 0.05;
 
 % ANMS 
-ANMS_params.max_num_point = 100;
+ANMS_params.max_num_point = 50;
 ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
 % Data struct to store data
-filter.pos = zeros(3,size(time_vec,2));
-filter.quat = quaternion(zeros(size(time_vec,2),4));
-filter.num_effective_particle = zeros(1,size(time_vec,2));
+filter_est.pos = zeros(3,size(time_vec,2));
+filter_est.quat = quaternion(zeros(size(time_vec,2),4));
+filter_est.num_effective_particle = zeros(1,size(time_vec,2));
+filter_est.num_map_features = zeros(1,size(time_vec,2));
 
-% Filter settings
+% Particle Filter settings
 filter.num_particle = 1;
+filter.resample_threshold = 0.2; % Percentage of num_particle for resample to trigger
 
 % Motion covariance = [cov_x, cov_y, cov_z, cov_phi, cov_theta, cov_psi]
 filter.motion_sigma = [0.1; 0.1; 0.1; 0.03; 0.03; 0.03];
 
-
-
 % Sensor model
-filter.sensor_HFOV = deg2rad(110);
-filter.sensor_VFOV = deg2rad(110);
-filter.sensor_max_range = 15;
-filter.sensor_min_range = 0.4;
-filter.filter_sensor_noise_std = 0.1;
+filter.sensor.HFOV = deg2rad(65 * 2);
+filter.sensor.VFOV = deg2rad(69 * 2);
+filter.sensor.max_range = 6;
+filter.sensor.min_range = 0.4;
+filter.filter_sensor_noise_std = 0.2;
 filter.R = diag([filter.filter_sensor_noise_std^2, ...
     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-filter.clutter_intensity = 2 / (15^2 * pi);
-filter.detection_prob = 0.9;
+filter.clutter_intensity = 100 / (6^2 * pi);
+filter.detection_prob = 0.5;
 
 % Map PHD config
-filter.birthGM_intensity = 0.1;
+filter.birthGM_intensity = 0.2;
 filter.birthGM_cov = [0.1, 0, 0; 0, 0.1, 0; 0, 0, 0.1];
 filter.map_Q = diag([0.01, 0.01, 0.01].^2);
+filter.adaptive_birth_dist_thres = 0.3;
 
 
 % PHD GM management parameters
 filter.pruning_thres = 10^-6;
-filter.merge_dist = 10;
-filter.num_GM_cap = 200;
+filter.merge_dist = 4;
+filter.num_GM_cap = 2000;
 
 %% Misc
 runtime = 0;
 
 %% Initialize filter
 % Set intial pose
-filter.pos(:,1) = truth.pos(:,1);
-filter.quat(1,:) = truth.quat(1,:);
+filter_est.pos(:,1) = truth.pos(:,1);
+filter_est.quat(1,:) = truth.quat(1,:);
 
 % Use measurement from timestep 1 to initialize map
 [left_rectified_img, right_rectified_img, depth_map] = ...
@@ -194,10 +195,10 @@ filter.quat(1,:) = truth.quat(1,:);
     depth_map, FAST_params, ANMS_params, camera_intrinsic);
 
 % Reproject measurements to world frame for testing
-meas_in_world = reproject_meas(filter.pos(:,1),...
-    filter.quat(1,:), measurements_ned);
+meas_in_world = reproject_meas(filter_est.pos(:,1),...
+    filter_est.quat(1,:), measurements_ned);
 
-particles = initialize_particles (filter.num_particle, filter.pos(:,1), filter.quat(1,:), ...
+particles = initialize_particles (filter.num_particle, filter_est.pos(:,1), filter_est.quat(1,:), ...
     meas_in_world, filter.birthGM_cov, filter.birthGM_intensity);
 
 
@@ -231,6 +232,8 @@ for kk = 2:size(time_vec,2)
     % Convert relative transformation matrix into PHD-SLAM odometry
     relative_Tr_ned = Tr_NED_to_camera * pinv(libviso_transformation_mat) * Tr_camera_to_NED;
     [trans_vel_ned, rot_vel_ned] = transformation_to_odom(relative_Tr_ned, dt);
+    odom_cmd.trans_vel_ned = trans_vel_ned;
+    odom_cmd.rot_vel_ned = rot_vel_ned;
 
     % Propagate only the odometry - used for comparison only
     odom.transformation_matrix(:,:,kk) = odom.transformation_matrix(:,:,kk-1) * ...
@@ -241,14 +244,33 @@ for kk = 2:size(time_vec,2)
     
     %% PHD-SLAM1
     % PHD-SLAM goes here just like the simulations
+    particle = run_phd_slam (particles, odom_cmd, measurements_ned, ...
+    filter, dt, truth.pos(:,kk),truth.quat(kk), 1);
 
+    % Extract state and landmark estimates
+    [pose_est, map_est] = extract_estimates_max_likeli(particle);
+    filter_est.pos(:,kk) = pose_est.pos;
+    filter_est.quat(kk,:) = pose_est.quat;
+    filter_est.filter_est.num_map_features(kk) = map_est.exp_num_landmark;
+
+    % Adaptive birth PHD (Lin Gao's implementation)
+    particle = adaptive_birth_PHD (pose_est.pos, pose_est.quat, measurements_ned, map_est, filter, particle);
+    
+    % Resample (if needed)
+    [particle, filter_est.num_effective_particle] = resample_particles(particle, filter);
+    
+    %% Project mapped features on to image frame
+    reprojected_features = project_mapped_features_to_img(map_est, pose_est, camera_intrinsic);
+    %%
+    runtime = horzcat(runtime,toc);
     %% Plotting 
     % Grey image
     figure(1)
     subplot (2,2,1)
     imshow(horzcat(left_rectified_img,right_rectified_img))
     hold on
-    plot (selected_corners)
+    scatter (selected_corners.Location(:,1),selected_corners.Location(:,2),'r.')
+    scatter (reprojected_features(:,1), reprojected_features(:,2),'g+')
     hold off
     xlabel("Rectified stereo image")
 
@@ -259,7 +281,7 @@ for kk = 2:size(time_vec,2)
     cb = colorbar(); 
     ylabel(cb,'Depth (m)','FontSize',10,'Rotation',270)
     hold on 
-    plot (selected_corners)
+    scatter (selected_corners.Location(:,1),selected_corners.Location(:,2),'r.')
     hold off
     xlabel("Depth map")
     axis equal
@@ -270,7 +292,8 @@ for kk = 2:size(time_vec,2)
     % Global ref
     draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
     hold on
-    scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'k.')
+    scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
+    scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+g')
     axis equal
     grid on
     grid minor
@@ -281,31 +304,12 @@ for kk = 2:size(time_vec,2)
     ylim([-5 5]);
     zlim([-1 4]);
 
-    exportgraphics(gcf,'viz.gif','Append',true);
     frame{kk-1} = getframe(gcf);
-
-    
-
-    %% LIBVISO2 stats
-     % %output statistics
-     % num_matches = visualOdometryStereoMex('num_matches');
-     % num_inliers = visualOdometryStereoMex('num_inliers');
-     % disp(['Frame: ' num2str(kk) ...
-     %     ', Matches: ' num2str(num_matches) ...
-     %     ', Inliers: ' num2str(100*num_inliers/num_matches,'%.1f') ,' %']);
-    
-    runtime = horzcat(runtime,toc);
 
 end
 toc
 
-obj = VideoWriter("myvideo",'Uncompressed AVI');
-obj.FrameRate = 20;
-open(obj);
-for i=1:length(frame)
-    writeVideo(obj,frame{i})
-end
-obj.close();
+%
 
 % release visual odometry
 visualOdometryStereoMex('close');

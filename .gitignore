@@ -4,5 +4,8 @@ dataset/
 # Ignore temporary matlab files
 *.asv
 
-# Ignore output gifs
+# Ignore output videos and gif
+*.avi
 *.gif
+
+
