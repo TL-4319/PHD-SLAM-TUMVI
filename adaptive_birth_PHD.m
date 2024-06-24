@@ -4,8 +4,8 @@ function particle = adaptive_birth_PHD (pos, quat, measurement, current_map_est,
 
     new_birth_mu = []; new_birth_inten = []; new_birth_cov = [];
     new_meas_world_frame = reproject_meas(pos, quat, measurement);
+    cur_GM_mu = current_map_est.max_likeli_gm_mu;
     for zz = 1:size(measurement,2)
-        cur_GM_mu = current_map_est.max_likeli_gm_mu;
         matrix_dist = repmat(new_meas_world_frame(:,zz),1, size(cur_GM_mu,2)) - cur_GM_mu;
         dist = vecnorm(matrix_dist);
         if min(dist) >= filter.adaptive_birth_dist_thres 

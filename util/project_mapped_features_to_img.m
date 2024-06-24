@@ -13,6 +13,11 @@ function pixel_location = project_mapped_features_to_img (map_est, pose_est, cam
         pixel_location(ii,2) = camera_intrinsic.cv + ...
             (pos_diff_cam_frame(ii,3) * camera_intrinsic.f / pos_diff_cam_frame(ii,1));
     end
+    
+    % Don't include mapped point outside camera FOV
+    outside_img = pixel_location(:,1) > 512;
+    pixel_location(outside_img,:) = [];
+
 
 
 end

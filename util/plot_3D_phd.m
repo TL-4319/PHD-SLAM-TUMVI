@@ -15,6 +15,7 @@ function plot_3D_phd (map_est, transparency)
         [X,Y,Z] = ellipsoid(phd_mu_x, phd_mu_y, phd_mu_z, phd_std_x, phd_std_y, phd_std_z, 10);
         C = ones(size(Z)) * inten;
         surf(X,Y,Z,C,'EdgeColor','none','FaceColor','flat','FaceAlpha',transparency)
-        clim([0,2])
+        %surf(X,Y,Z,C,'FaceColor','flat','FaceAlpha',transparency)
+        clim([0,1.4])
     end
 end

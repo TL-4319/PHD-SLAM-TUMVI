@@ -12,7 +12,7 @@ title ("Visualization")
 fig1.Position = [1,1,2000,2000];
 
 %% Select data set
-path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
+path_to_dataset = '/home/tuan/Projects/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
 
 %% Preparing dataset
@@ -160,17 +160,17 @@ filter.sensor.HFOV = deg2rad(65 * 2);
 filter.sensor.VFOV = deg2rad(69 * 2);
 filter.sensor.max_range = 6;
 filter.sensor.min_range = 0.4;
-filter.filter_sensor_noise_std = 0.01;
+filter.filter_sensor_noise_std = 0.1;
 filter.R = diag([filter.filter_sensor_noise_std^2, ...
     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-filter.clutter_intensity = 10^-9;
-filter.detection_prob = 0.5;
+filter.clutter_intensity = 10^-2;
+filter.detection_prob = 0.4;
 
 % Map PHD config
-filter.birthGM_intensity = 0.4;
-filter.birthGM_cov = [0.1, 0, 0; 0, 0.1, 0; 0, 0, 0.1];
+filter.birthGM_intensity = 0.1;
+filter.birthGM_cov = [0.3, 0, 0; 0, 0.3, 0; 0, 0, 0.3];
 filter.map_Q = diag([0.1, 0.1, 0.1].^2);
-filter.adaptive_birth_dist_thres = 1;
+filter.adaptive_birth_dist_thres = 2;
 
 
 % PHD GM management parameters
@@ -198,7 +198,7 @@ filter_est.quat(1,:) = truth.quat(1,:);
 meas_in_world = reproject_meas(filter_est.pos(:,1),...
     filter_est.quat(1,:), measurements_ned);
 
-particles = initialize_particles (filter.num_particle, filter_est.pos(:,1), filter_est.quat(1,:), ...
+particle = initialize_particles (filter.num_particle, filter_est.pos(:,1), filter_est.quat(1,:), ...
     meas_in_world, filter.birthGM_cov, filter.birthGM_intensity);
 
 %% Plot first frame
@@ -290,7 +290,7 @@ for kk = 2:size(time_vec,2)
     
     %% PHD-SLAM1
     % PHD-SLAM goes here just like the simulations
-    particle = run_phd_slam (particles, odom_cmd, measurements_ned, ...
+    particle = run_phd_slam (particle, odom_cmd, measurements_ned, ...
     filter, dt, truth.pos(:,kk),truth.quat(kk), 1);
 
     % Extract state and landmark estimates
@@ -340,7 +340,7 @@ for kk = 2:size(time_vec,2)
     draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
-    scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+g')
+    scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+k')
     plot_3D_phd(map_est,1)
     colorbar
     axis equal
@@ -355,7 +355,7 @@ for kk = 2:size(time_vec,2)
     title_str = sprintf("Current ind = %d. t = %0.2f", kk,time_vec(kk)-time_vec(1));
     title(title_str)
     frame{kk-1} = getframe(gcf);
-    exportgraphics(gcf, "viz.gif", Append=true);
+    %exportgraphics(gcf, "viz.gif", Append=true);
 
 end
 toc(total_timer);
