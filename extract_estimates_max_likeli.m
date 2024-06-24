@@ -13,11 +13,14 @@ function [pose_est, map_est] = extract_estimates_max_likeli (particle)
     % MAP Landmark estimation
     max_likeli_gm_mu = particle(1,max_w_particle_ind).gm_mu;
     max_likeli_gm_inten = particle(1,max_w_particle_ind).gm_inten;
-    %max_likeli_gm_cov = particle(1,max_w_particle_ind).gm_cov; NOT USED
+    max_likeli_gm_cov = particle(1,max_w_particle_ind).gm_cov; % Used for visualization
+    
     % Find expected number of landmark
     map_est.exp_num_landmark = round(sum(max_likeli_gm_inten));
     [~,ID_map] = maxk (max_likeli_gm_inten, map_est.exp_num_landmark);
     map_est.feature_pos = max_likeli_gm_mu(:,ID_map);
     map_est.max_likeli_gm_mu = max_likeli_gm_mu;
+    map_est.max_likeli_gm_cov = max_likeli_gm_cov;
+    map_est.max_likeli_gm_inten = max_likeli_gm_inten;
     
 end

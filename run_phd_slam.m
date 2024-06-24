@@ -57,6 +57,10 @@ function particle = run_phd_slam (prev_particle, odom_cmd, measurement, ...
 
         %% Only  perform update steps if there are GM components in the FOV
         if num_GM_in > 0
+            
+            for kk = 1:num_GM_in
+                 GM_cov_in(:,:,kk) = GM_cov_in_prev(:,:,kk) + filter.map_Q;
+             end
             %% Pre compute inner update terms
             [pred_z, K, S, P, Sinv] = compute_update_terms (cur_particle,...
                 GM_mu_in_prev, GM_cov_in_prev, filter.R);

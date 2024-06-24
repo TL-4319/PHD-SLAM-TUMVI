@@ -138,7 +138,7 @@ FAST_params.min_quality = 0.05;
 FAST_params.min_contrast = 0.05;
 
 % ANMS 
-ANMS_params.max_num_point = 50;
+ANMS_params.max_num_point = 5;
 ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
@@ -160,17 +160,17 @@ filter.sensor.HFOV = deg2rad(65 * 2);
 filter.sensor.VFOV = deg2rad(69 * 2);
 filter.sensor.max_range = 6;
 filter.sensor.min_range = 0.4;
-filter.filter_sensor_noise_std = 0.2;
+filter.filter_sensor_noise_std = 0.01;
 filter.R = diag([filter.filter_sensor_noise_std^2, ...
     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-filter.clutter_intensity = 100 / (6^2 * pi);
+filter.clutter_intensity = 10^-9;
 filter.detection_prob = 0.5;
 
 % Map PHD config
-filter.birthGM_intensity = 0.2;
+filter.birthGM_intensity = 0.4;
 filter.birthGM_cov = [0.1, 0, 0; 0, 0.1, 0; 0, 0, 0.1];
-filter.map_Q = diag([0.01, 0.01, 0.01].^2);
-filter.adaptive_birth_dist_thres = 0.3;
+filter.map_Q = diag([0.1, 0.1, 0.1].^2);
+filter.adaptive_birth_dist_thres = 1;
 
 
 % PHD GM management parameters
@@ -191,7 +191,7 @@ filter_est.quat(1,:) = truth.quat(1,:);
     get_images(path_to_dataset, dataset_name, name_array(1,:), depth_factor);
 
 % Preprocess image to generate measurement sets
-[measurements_ned, ~, ~] = detect_and_project (left_rectified_img,...
+[measurements_ned, ~, selected_corners] = detect_and_project (left_rectified_img,...
     depth_map, FAST_params, ANMS_params, camera_intrinsic);
 
 % Reproject measurements to world frame for testing
@@ -201,16 +201,62 @@ meas_in_world = reproject_meas(filter_est.pos(:,1),...
 particles = initialize_particles (filter.num_particle, filter_est.pos(:,1), filter_est.quat(1,:), ...
     meas_in_world, filter.birthGM_cov, filter.birthGM_intensity);
 
+%% Plot first frame
+% Preallocate cell for making video
+frame = cell(size(time_vec,2),1);
+ % Grey image
+ figure(1)
+ subplot (2,2,1)
+ imshow(horzcat(left_rectified_img,right_rectified_img))
+ hold on
+ scatter (selected_corners.Location(:,1),selected_corners.Location(:,2),'r.')
+ hold off
+ xlabel("Rectified stereo image")
+
+ % Depth map
+ subplot (2,2,3)
+ imagesc(depth_map)
+ clim([0 6])
+ cb = colorbar();
+ ylabel(cb,'Depth (m)','FontSize',10,'Rotation',270)
+ hold on
+ scatter (selected_corners.Location(:,1),selected_corners.Location(:,2),'r.')
+ hold off
+ xlabel("Depth map")
+ axis equal
+
+ % Trajectory
+ subplot_traj = subplot(2,2,[2,4]);
+ draw_trajectory(truth_pos_cam0_ned(:,1), truth_quat_cam0_ned(1,:), truth_pos_cam0_ned(:,1), 1, 0.4, 2,'k',false, false);
+ draw_trajectory(filter_est.pos(:,1), filter_est.quat(1,:), filter_est.pos(:,1),1,0.4,2,'g',true, false);
+ % Global ref
+ draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
+ hold on
+ scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
+ axis equal
+ grid on
+ grid minor
+ xlabel("X");
+ ylabel("Y");
+ zlabel("Z");
+ xlim([-5 5]);
+ ylim([-5 5]);
+ zlim([-1 4]);
+ title_str = sprintf("Current ind = %d. t = %0.2f", 1,time_vec(1)-time_vec(1));
+ title(title_str)
+ frame{1} = getframe(gcf);
+
 
 %%
-frame = cell(size(time_vec,2)-1);
-tic
+
+total_timer = tic;
 
 %% Run loop
 for kk = 2:size(time_vec,2)
+    %
+    iteration_timer = tic;
     %% Read images and pre-processing
     % Read greyscale and depth images
-    tic
     [left_rectified_img, right_rectified_img, depth_map] = ...
         get_images(path_to_dataset, dataset_name, name_array(kk,:), depth_factor);
     
@@ -262,7 +308,7 @@ for kk = 2:size(time_vec,2)
     %% Project mapped features on to image frame
     reprojected_features = project_mapped_features_to_img(map_est, pose_est, camera_intrinsic);
     %%
-    runtime = horzcat(runtime,toc);
+    runtime = horzcat(runtime,toc(iteration_timer));
     %% Plotting 
     % Grey image
     figure(1)
@@ -288,12 +334,15 @@ for kk = 2:size(time_vec,2)
     
     % Trajectory
     subplot_traj = subplot(2,2,[2,4]);
-    draw_trajectory(truth_pos_cam0_ned(:,kk), truth_quat_cam0_ned(kk,:), truth_pos_cam0_ned(:,1:kk), 1, 0.4, 2,'k',false, true);
+    draw_trajectory(truth_pos_cam0_ned(:,kk), truth_quat_cam0_ned(kk,:), truth_pos_cam0_ned(:,kk), 1, 0.4, 2,'k',false, false);
+    draw_trajectory(filter_est.pos(:,kk), filter_est.quat(kk,:), filter_est.pos(:,kk),1,0.4,2,'g',true, false);
     % Global ref
     draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
     scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+g')
+    plot_3D_phd(map_est,1)
+    colorbar
     axis equal
     grid on
     grid minor
@@ -303,13 +352,22 @@ for kk = 2:size(time_vec,2)
     xlim([-5 5]);
     ylim([-5 5]);
     zlim([-1 4]);
-
+    title_str = sprintf("Current ind = %d. t = %0.2f", kk,time_vec(kk)-time_vec(1));
+    title(title_str)
     frame{kk-1} = getframe(gcf);
+    exportgraphics(gcf, "viz.gif", Append=true);
 
 end
-toc
+toc(total_timer);
 
 %
+obj = VideoWriter("myvideo");
+obj.FrameRate = 20;
+open(obj);
+for i=1:length(frame)
+    writeVideo(obj,frame{i})
+end
+obj.close();
 
 % release visual odometry
 visualOdometryStereoMex('close');
