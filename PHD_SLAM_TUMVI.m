@@ -12,7 +12,7 @@ title ("Visualization")
 fig1.Position = [1,1,2000,2000];
 
 %% Select data set
-path_to_dataset = '/home/tuan/Projects/tum-vi/';
+path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
 
 %% Preparing dataset
@@ -138,7 +138,7 @@ FAST_params.min_quality = 0.05;
 FAST_params.min_contrast = 0.05;
 
 % ANMS 
-ANMS_params.max_num_point = 5;
+ANMS_params.max_num_point = 30;
 ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
@@ -153,29 +153,31 @@ filter.num_particle = 1;
 filter.resample_threshold = 0.2; % Percentage of num_particle for resample to trigger
 
 % Motion covariance = [cov_x, cov_y, cov_z, cov_phi, cov_theta, cov_psi]
-filter.motion_sigma = [0.1; 0.1; 0.1; 0.03; 0.03; 0.03];
+filter.motion_sigma = [0.1; 0.1; 0.1; 0.025; 0.025; 0.025];
 
 % Sensor model
-filter.sensor.HFOV = deg2rad(65 * 2);
-filter.sensor.VFOV = deg2rad(69 * 2);
+% FOV are obtained using the the projection matrix focal lenght and
+% principle points for best accuracy.
+filter.sensor.HFOV = deg2rad(65.285 * 2);
+filter.sensor.VFOV = deg2rad(68.25 * 2);
 filter.sensor.max_range = 6;
 filter.sensor.min_range = 0.4;
-filter.filter_sensor_noise_std = 0.1;
+filter.filter_sensor_noise_std = 0.05;
 filter.R = diag([filter.filter_sensor_noise_std^2, ...
     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-filter.clutter_intensity = 10^-2;
-filter.detection_prob = 0.4;
+filter.clutter_intensity = 10 * 10^-2;
+filter.detection_prob = 0.7;
 
 % Map PHD config
 filter.birthGM_intensity = 0.1;
 filter.birthGM_cov = [0.3, 0, 0; 0, 0.3, 0; 0, 0, 0.3];
-filter.map_Q = diag([0.1, 0.1, 0.1].^2);
-filter.adaptive_birth_dist_thres = 2;
+filter.map_Q = diag([0.05, 0.05, 0.05].^2);
+filter.adaptive_birth_dist_thres = 0.7;
 
 
 % PHD GM management parameters
-filter.pruning_thres = 10^-6;
-filter.merge_dist = 4;
+filter.pruning_thres = 10^-3;
+filter.merge_dist = 100;
 filter.num_GM_cap = 2000;
 
 %% Misc
@@ -212,6 +214,7 @@ frame = cell(size(time_vec,2),1);
  scatter (selected_corners.Location(:,1),selected_corners.Location(:,2),'r.')
  hold off
  xlabel("Rectified stereo image")
+ 
 
  % Depth map
  subplot (2,2,3)
@@ -224,6 +227,7 @@ frame = cell(size(time_vec,2),1);
  hold off
  xlabel("Depth map")
  axis equal
+ 
 
  % Trajectory
  subplot_traj = subplot(2,2,[2,4]);
@@ -244,6 +248,7 @@ frame = cell(size(time_vec,2),1);
  zlim([-1 4]);
  title_str = sprintf("Current ind = %d. t = %0.2f", 1,time_vec(1)-time_vec(1));
  title(title_str)
+ drawnow
  frame{1} = getframe(gcf);
 
 
@@ -306,7 +311,7 @@ for kk = 2:size(time_vec,2)
     [particle, filter_est.num_effective_particle] = resample_particles(particle, filter);
     
     %% Project mapped features on to image frame
-    reprojected_features = project_mapped_features_to_img(map_est, pose_est, camera_intrinsic);
+    reprojected_features = project_mapped_features_to_img(map_est, pose_est, camera_intrinsic, filter.sensor);
     %%
     runtime = horzcat(runtime,toc(iteration_timer));
     %% Plotting 
@@ -319,6 +324,7 @@ for kk = 2:size(time_vec,2)
     scatter (reprojected_features(:,1), reprojected_features(:,2),'g+')
     hold off
     xlabel("Rectified stereo image")
+    
 
     % Depth map
     subplot (2,2,3)
@@ -332,16 +338,17 @@ for kk = 2:size(time_vec,2)
     xlabel("Depth map")
     axis equal
     
+    
     % Trajectory
     subplot_traj = subplot(2,2,[2,4]);
     draw_trajectory(truth_pos_cam0_ned(:,kk), truth_quat_cam0_ned(kk,:), truth_pos_cam0_ned(:,kk), 1, 0.4, 2,'k',false, false);
     draw_trajectory(filter_est.pos(:,kk), filter_est.quat(kk,:), filter_est.pos(:,kk),1,0.4,2,'g',true, false);
     % Global ref
-    draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
+    %draw_trajectory([0;0;0], quaternion(1,0,0,0), [0;0;0], 1, 2, 2,'k',true, true);
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
     scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+k')
-    plot_3D_phd(map_est,1)
+    plot_3D_phd(map_est,0.2)
     colorbar
     axis equal
     grid on
@@ -354,7 +361,8 @@ for kk = 2:size(time_vec,2)
     zlim([-1 4]);
     title_str = sprintf("Current ind = %d. t = %0.2f", kk,time_vec(kk)-time_vec(1));
     title(title_str)
-    frame{kk-1} = getframe(gcf);
+    frame{kk} = getframe(gcf);
+    drawnow
     %exportgraphics(gcf, "viz.gif", Append=true);
 
 end
