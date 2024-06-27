@@ -1,5 +1,5 @@
 function particle = run_phd_slam (prev_particle, odom_cmd, measurement, ...
-    filter, dt, truth_pos, truth_quat, use_truth_pose_flag)
+    filter, dt, truth_pos, truth_quat, camera_intrinsic, use_truth_pose_flag)
     % Pre allocating particle struct
     particle = prev_particle;
     
@@ -63,7 +63,7 @@ function particle = run_phd_slam (prev_particle, odom_cmd, measurement, ...
              end
             %% Pre compute inner update terms
             [pred_z, K, S, P, Sinv] = compute_update_terms (cur_particle,...
-                GM_mu_in_prev, GM_cov_in_prev, filter.R);
+                GM_mu_in_prev, GM_cov_in_prev, filter.R, camera_intrinsic);
 
             % Update PHD components if missed detected GM
             GM_inten_in = (1 - filter.detection_prob) * GM_inten_in_prev;

@@ -1,4 +1,4 @@
-function [measurements_ned, statistic, selected_corners] = detect_and_project (left_rectified_img,...
+function [measurements_ned, measurements_projective, statistic, selected_corners] = detect_and_project (left_rectified_img,...
     depth_map, FAST_params, ANMS_params, camera_intrinsic)
     %% Function to create 3D measurement relative to camera in body fixed NED frame
 
@@ -38,7 +38,10 @@ function [measurements_ned, statistic, selected_corners] = detect_and_project (l
 
     % MAROUN - Here is the step where I convert the measurement from2D
     % images to 3D points where NED convention matters for PHD-SLAM
+
+    % Projective measurement vector is of form [x_pixel_loc, y_pixel_loc, depth]
     measurements_ned = zeros(3,statistic.ANMS_num_selected_point);
+    measurements_projective = measurements_ned; 
     for ii = 1:statistic.ANMS_num_selected_point
         % NED X axis / North / camera Z axis
         measurements_ned(1,ii) = depth_map(selected_depth_pixel(ii,2),selected_depth_pixel(ii,1));
@@ -50,6 +53,13 @@ function [measurements_ned, statistic, selected_corners] = detect_and_project (l
         % NED Z axis / Down / camera Y axis
         measurements_ned(3,ii) = (selected_depth_pixel(ii,2) - camera_intrinsic.cv) * ...
             measurements_ned(1,ii) / camera_intrinsic.f;
+
+        % Populate projective measurement vector
+        measurements_projective(1,ii) = selected_depth_pixel(ii,1);
+
+        measurements_projective(2,ii) = selected_depth_pixel(ii,2);
+
+        measurements_projective(3,ii) = measurements_ned(1,ii);
     end
     
 end

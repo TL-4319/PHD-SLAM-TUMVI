@@ -12,7 +12,8 @@ title ("Visualization")
 fig1.Position = [1,1,2000,2000];
 
 %% Select data set
-path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
+%path_to_dataset = '/home/tuan/Projects/tum-vi/';
+%path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
 
 %% Preparing dataset
@@ -162,17 +163,21 @@ filter.sensor.HFOV = deg2rad(65.285 * 2);
 filter.sensor.VFOV = deg2rad(68.25 * 2);
 filter.sensor.max_range = 6;
 filter.sensor.min_range = 0.4;
-filter.filter_sensor_noise_std = 0.05;
-filter.R = diag([filter.filter_sensor_noise_std^2, ...
-    filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-filter.clutter_intensity = 10 * 10^-2;
+filter.pixel_std = 1;
+filter.depth_std = 0.5;
+filter.R = diag([filter.pixel_std^2, filter.pixel_std^2, filter.depth_std^2]);
+filter.clutter_intensity = 1 * 10^-2;
 filter.detection_prob = 0.7;
 
+% filter.filter_sensor_noise_std = 0.05;
+% filter.R = diag([filter.filter_sensor_noise_std^2, ...
+%     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
+
 % Map PHD config
-filter.birthGM_intensity = 0.1;
-filter.birthGM_cov = [0.3, 0, 0; 0, 0.3, 0; 0, 0, 0.3];
-filter.map_Q = diag([0.05, 0.05, 0.05].^2);
-filter.adaptive_birth_dist_thres = 0.7;
+filter.birthGM_intensity = 0.2;
+filter.birthGM_cov = diag([0.01, 0.01, 0.01].^2);
+filter.map_Q = diag([0.01, 0.01, 0.01].^2);
+filter.adaptive_birth_dist_thres = 0.5;
 
 
 % PHD GM management parameters
@@ -193,7 +198,7 @@ filter_est.quat(1,:) = truth.quat(1,:);
     get_images(path_to_dataset, dataset_name, name_array(1,:), depth_factor);
 
 % Preprocess image to generate measurement sets
-[measurements_ned, ~, selected_corners] = detect_and_project (left_rectified_img,...
+[measurements_ned, ~, ~, selected_corners] = detect_and_project (left_rectified_img,...
     depth_map, FAST_params, ANMS_params, camera_intrinsic);
 
 % Reproject measurements to world frame for testing
@@ -266,7 +271,7 @@ for kk = 2:size(time_vec,2)
         get_images(path_to_dataset, dataset_name, name_array(kk,:), depth_factor);
     
     % Preprocess image to generate measurement sets
-    [measurements_ned, statistic, selected_corners] = detect_and_project (left_rectified_img,...
+    [measurements_ned, measurements_projective, statistic, selected_corners] = detect_and_project (left_rectified_img,...
     depth_map, FAST_params, ANMS_params, camera_intrinsic);
     
     % Reproject measurements to world frame for testing
@@ -295,8 +300,8 @@ for kk = 2:size(time_vec,2)
     
     %% PHD-SLAM1
     % PHD-SLAM goes here just like the simulations
-    particle = run_phd_slam (particle, odom_cmd, measurements_ned, ...
-    filter, dt, truth.pos(:,kk),truth.quat(kk), 1);
+    particle = run_phd_slam (particle, odom_cmd, measurements_projective, ...
+    filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,1);
 
     % Extract state and landmark estimates
     [pose_est, map_est] = extract_estimates_max_likeli(particle);
@@ -348,7 +353,7 @@ for kk = 2:size(time_vec,2)
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
     scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+k')
-    plot_3D_phd(map_est,0.2)
+    plot_3D_phd(map_est,10,1)
     colorbar
     axis equal
     grid on
