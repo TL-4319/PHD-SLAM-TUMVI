@@ -77,7 +77,7 @@ function particle = run_phd_slam (prev_particle, odom_cmd, measurement, ...
                 for jj = 1:num_GM_in
                     tau(1,jj) =  filter.detection_prob * GM_inten_in_prev(jj) * ...
                         mvnpdf(measurement(:,zz),pred_z(:,jj),S(:,:,jj));
-                    if GM_inten_in_prev(jj) > 0.8
+                    if GM_inten_in_prev(jj) > filter.GM_inten_thres
                         likelipf(1,jj) = tau(1,jj); % Only include strong GM in particle likilihood calculation
                     end
                     mu = GM_mu_in_prev(:,jj) + K(:,:,jj) * (measurement(:,zz) - pred_z(:,jj));

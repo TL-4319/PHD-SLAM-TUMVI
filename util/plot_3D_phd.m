@@ -1,7 +1,10 @@
-function plot_3D_phd (map_est, sigma_mult, transparency)
+function plot_3D_phd (map_est, sigma_mult, inten_cutoff, transparency)
     hold on
     for ii = 1:size(map_est.max_likeli_gm_inten,2)
         inten = map_est.max_likeli_gm_inten(1,ii)/2;
+        if inten < inten_cutoff
+            continue
+        end
 
         h = plot_gaussian_ellipsoid(map_est.max_likeli_gm_mu(:,ii),...
             map_est.max_likeli_gm_cov(:,:,ii)*sigma_mult, inten);

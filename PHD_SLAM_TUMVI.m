@@ -174,10 +174,11 @@ filter.detection_prob = 0.7;
 %     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
 
 % Map PHD config
-filter.birthGM_intensity = 0.2;
+filter.birthGM_intensity = 0.3;
 filter.birthGM_cov = diag([0.02, 0.02, 0.02].^2);
 filter.map_Q = diag([0.01, 0.01, 0.01].^2);
 filter.adaptive_birth_dist_thres = 0.5;
+filter.GM_inten_thres = 0.8;
 
 
 % PHD GM management parameters
@@ -353,7 +354,7 @@ for kk = 2:size(time_vec,2)
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
     scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+k')
-    plot_3D_phd(map_est,20,0.2)
+    plot_3D_phd(map_est,50,filter.GM_inten_thres,0.2)
     colorbar
     axis equal
     grid on
