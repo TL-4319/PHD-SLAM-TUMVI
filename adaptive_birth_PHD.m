@@ -1,5 +1,5 @@
 function particle = adaptive_birth_PHD (pos, quat, measurement, current_map_est, filter, prev_particle)
-    %% Generate GM component from measurements if far enough apart
+    %% Generate GM component from measurements if far enough from a previously mapped GM component
     particle = prev_particle; % Pre-allocating
 
     new_birth_mu = []; new_birth_inten = []; new_birth_cov = [];

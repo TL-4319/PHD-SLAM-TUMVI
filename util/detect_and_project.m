@@ -1,6 +1,6 @@
 function [measurements_ned, measurements_projective, statistic, selected_corners] = detect_and_project (left_rectified_img,...
     depth_map, FAST_params, ANMS_params, camera_intrinsic)
-    %% Function to create 3D measurement relative to camera in body fixed NED frame
+    %% Function to create 3D measurement relative to camera in body fixed NED frame and the the raw measurement in image plane and depth
 
     %% FAST feature detector
     FAST_corners = detectFASTFeatures(left_rectified_img, ...

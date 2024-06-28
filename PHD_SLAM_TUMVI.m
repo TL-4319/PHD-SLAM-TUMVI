@@ -6,17 +6,17 @@ addpath libviso2/matlab/;   % Libviso
 addpath util/;              % Utility functions
 addpath ssc/;               % ANMS 
 
-%% Plotting 
+%% Plotting. NO INPUT REQUIRED
 fig1 = figure(1);
 title ("Visualization")
 fig1.Position = [1,1,2000,2000];
 
 %% Select data set
-%path_to_dataset = '/home/tuan/Projects/tum-vi/';
-path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
+path_to_dataset = '/home/tuan/Projects/tum-vi/';
+%path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
 
-%% Preparing dataset
+%% Preparing dataset. NO INPUT REQUIRED
 timing_filename = strcat(path_to_dataset,dataset_name,'/dso/cam0/times.txt');
 
 % Timing data is Nx3 array: [filename, timestamps(s), exposure_time(ms)]
@@ -46,10 +46,18 @@ dt_vec = horzcat(dt_vec, mean(dt_vec)); % Pad the end to make vector same size
 dt = mean(dt_vec);
 
 %% Camera and hardware configuration
-% deoth_factor needs to match with whatever is used as depth factor in
-% stereo matching script. This is not needed if the stereo camera returns the depth in metric scale 
+% Optical paramaters after rectification
+% MUST USE VALUES FROM REPROJECTION MATRIX AFTER STEREO RECTIFICATION
+camera_intrinsic.f     = 96.8239926;    % focal length
+camera_intrinsic.cu    = 247.70848004;  % x position of principal point
+camera_intrinsic.cv    = 255.31920479;  % y position of principal point
+camera_intrinsic.base  = 0.101039;      % distance between left and right camera
+
+% depth_factor needs to match with whatever is used as depth factor in stereo matching script. 
+% NOT NEEDED IF CAMERA ALREADY RETURN DEPTH MAP IN METRIC SCALE
 depth_factor = 5000; % Metric Z range = depth[v,u]/depth_factor 
 
+% NO INPUT REQUIRED for the rest of the section
 % CV coordinate to NED - This is by definition
 Tr_camera_to_NED = eye(4);
 Tr_camera_to_NED(1:3,1:3) = [0 1 0; 
@@ -57,12 +65,8 @@ Tr_camera_to_NED(1:3,1:3) = [0 1 0;
                              1 0 0];
 Tr_NED_to_camera = pinv(Tr_camera_to_NED);
 
-% Ooptical paramaters after rectification
-camera_intrinsic.f     = 96.8239926;
-camera_intrinsic.cu    = 247.70848004;
-camera_intrinsic.cv    = 255.31920479;
-
 % Geometry of setup. Obtained from camchain.yaml
+% ONLY APPLICABLE FOR TUM-VI
 transformation_cam0_to_imu = [-0.9995250378696743, 0.029615343885863205, -0.008522328211654736, 0.04727988224914392;...
                0.0075019185074052044, -0.03439736061393144, -0.9993800792498829, -0.047443232143367084;...
               -0.02989013031643309, -0.998969345370175, 0.03415885127385616, -0.0681999605066297;...
@@ -70,7 +74,7 @@ transformation_cam0_to_imu = [-0.9995250378696743, 0.029615343885863205, -0.0085
 
 transformation_imu_to_cam0 = inv(transformation_cam0_to_imu);
 
-%% Get truth data set
+%% Get truth data set. NO INPUT REQUIRED
 % Get truth data
 ground_truth_filename = strcat(path_to_dataset,dataset_name,'/dso/gt_imu.csv');
 truth_mat = readmatrix(ground_truth_filename,"NumHeaderLines",2);
@@ -109,18 +113,18 @@ truth.quat = truth_quat_cam0_ned;
 
 %% Libviso2 setup
 % Obtained these from the projection matrix calculation
-viso_param.f     = 96.8239926;
-viso_param.cu    = 247.70848004;
-viso_param.cv    = 255.31920479;
-viso_param.base  = 0.101039;
+viso_param.f     = camera_intrinsic.f;
+viso_param.cu    = camera_intrinsic.cu;
+viso_param.cv    = camera_intrinsic.cv;
+viso_param.base  = camera_intrinsic.base;
 
 % These parameter changes are still to be tested to see if they improve tracking
 %viso_param.ransac_iters = 200;
-viso_param.max_features = 1000;
-viso_param.bucket_width = 10;
-viso_param.bucket.bucket_height = 10;
+viso_param.max_features = 1000;         
+viso_param.bucket_width = 10;           
+viso_param.bucket_height = 10;   
 
-
+% NO INPUT REQUIRED for the rest of the section
 % init visual odometry
 visualOdometryStereoMex('init',viso_param);
 
@@ -143,15 +147,10 @@ ANMS_params.max_num_point = 30;
 ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
-% Data struct to store data
-filter_est.pos = zeros(3,size(time_vec,2));
-filter_est.quat = quaternion(zeros(size(time_vec,2),4));
-filter_est.num_effective_particle = zeros(1,size(time_vec,2));
-filter_est.num_map_features = zeros(1,size(time_vec,2));
-
 % Particle Filter settings
 filter.num_particle = 1;
 filter.resample_threshold = 0.2; % Percentage of num_particle for resample to trigger
+filter.num_perfect_iter = 20; % Number of iteration that uses true pose. This is equavalent with starting out standing still and letting the map initialize
 
 % Motion covariance = [cov_x, cov_y, cov_z, cov_phi, cov_theta, cov_psi]
 filter.motion_sigma = [0.1; 0.1; 0.1; 0.025; 0.025; 0.025];
@@ -159,37 +158,41 @@ filter.motion_sigma = [0.1; 0.1; 0.1; 0.025; 0.025; 0.025];
 % Sensor model
 % FOV are obtained using the the projection matrix focal lenght and
 % principle points for best accuracy.
-filter.sensor.HFOV = deg2rad(65.285 * 2);
-filter.sensor.VFOV = deg2rad(68.25 * 2);
-filter.sensor.max_range = 6;
-filter.sensor.min_range = 0.4;
-filter.pixel_std = 2;
-filter.depth_std = 0.7;
-filter.R = diag([filter.pixel_std^2, filter.pixel_std^2, filter.depth_std^2]);
-filter.clutter_intensity = 10 * 10^-4;
+filter.sensor.HFOV = deg2rad(65.285 * 2);   % Horizontal FOV of sensor. This is estimated as FOV after rectification using intrinsics
+filter.sensor.VFOV = deg2rad(68.25 * 2);    % Vertical FOV of sensor. This is estimated as FOV after rectification using intrinsics
+filter.sensor.max_range = 6;                % Max range in depth map
+filter.sensor.min_range = 0.4;              % Min range in depth map
+filter.pixel_std = 2;                       % Standard deviation of the pixel location measurement error of landmark
+filter.depth_std = 0.7;                     % Standard deviation of the depth measurement error of landmark
+filter.clutter_intensity = 10 * 10^-4;      
 filter.detection_prob = 0.7;
 
-% filter.filter_sensor_noise_std = 0.05;
-% filter.R = diag([filter.filter_sensor_noise_std^2, ...
-%     filter.filter_sensor_noise_std^2, filter.filter_sensor_noise_std^2]);
-
 % Map PHD config
-filter.birthGM_intensity = 0.3;
-filter.birthGM_cov = diag([0.02, 0.02, 0.02].^2);
-filter.map_Q = diag([0.01, 0.01, 0.01].^2);
+filter.birthGM_intensity = 0.3;             % Default intensity of GM component when birth
+filter.birthGM_std = 0.02;                  % Default standard deviation in position of GM component when birth
+filter.map_std = 0.01;
 filter.adaptive_birth_dist_thres = 0.5;
-filter.GM_inten_thres = 0.8;
-
-
-% PHD GM management parameters
+filter.GM_inten_thres = 0.4;                % Threshold to use a component for importance weight calc and plotting
 filter.pruning_thres = 10^-5;
 filter.merge_dist = 4;
 filter.num_GM_cap = 2000;
 
+% NO INPUT REQUIRED for the rest of the section
+% Calculate corresponding matrices
+filter.R = diag([filter.pixel_std^2, filter.pixel_std^2, filter.depth_std^2]);
+filter.birthGM_cov = diag([filter.birthGM_std, filter.birthGM_std, filter.birthGM_std].^2);
+filter.map_Q = diag([filter.map_std, filter.map_std, filter.map_std].^2);
+
+% Data struct to store data
+filter_est.pos = zeros(3,size(time_vec,2));
+filter_est.quat = quaternion(zeros(size(time_vec,2),4));
+filter_est.num_effective_particle = zeros(1,size(time_vec,2));
+filter_est.num_map_features = zeros(1,size(time_vec,2));
+
 %% Misc
 runtime = 0;
 
-%% Initialize filter
+%% Initialize filter. NO INPUT REQUIRED
 % Set intial pose
 filter_est.pos(:,1) = truth.pos(:,1);
 filter_est.quat(1,:) = truth.quat(1,:);
@@ -209,7 +212,7 @@ meas_in_world = reproject_meas(filter_est.pos(:,1),...
 particle = initialize_particles (filter.num_particle, filter_est.pos(:,1), filter_est.quat(1,:), ...
     meas_in_world, filter.birthGM_cov, filter.birthGM_intensity);
 
-%% Plot first frame
+%% Plot first frame. NO INPUT REQUIRED
 % Preallocate cell for making video
 frame = cell(size(time_vec,2),1);
  % Grey image
@@ -258,11 +261,10 @@ frame = cell(size(time_vec,2),1);
  frame{1} = getframe(gcf);
 
 
-%%
-
+%% NO INPUT REQUIRED
 total_timer = tic;
 
-%% Run loop
+%% Run loop NO INPUT REQUIRED
 for kk = 2:size(time_vec,2)
     %
     iteration_timer = tic;
@@ -301,8 +303,13 @@ for kk = 2:size(time_vec,2)
     
     %% PHD-SLAM1
     % PHD-SLAM goes here just like the simulations
-    particle = run_phd_slam (particle, odom_cmd, measurements_projective, ...
+    if kk < filter.num_perfect_iter
+        particle = run_phd_slam (particle, odom_cmd, measurements_projective, ...
     filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,1);
+    else
+        particle = run_phd_slam (particle, odom_cmd, measurements_projective, ...
+    filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,0);
+    end
 
     % Extract state and landmark estimates
     [pose_est, map_est] = extract_estimates_max_likeli(particle);

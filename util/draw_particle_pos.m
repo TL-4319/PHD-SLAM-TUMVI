@@ -1,4 +1,5 @@
 function draw_particle_pos (particle, fig_num)
+    % Draw position of particle set
     figure(fig_num)
     hold on
     for i=1:size(particle,2)

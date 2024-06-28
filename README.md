@@ -21,7 +21,7 @@ Create new directories where they are needed ie. rectified folder in cam0 and ca
 
 ### Note on projection matrices (very important for libviso2 to work properly)
 
-The projections matrices for the TUM-VI setup is located in tum_vi_projection_matrices.txt. These matrices are the projection matrices of the left (P1) and right (P2) camera in the stereo setup after performing OpenCV cv.fisheye.stereoRectify method. 
+The projections matrices for the TUM-VI setup is located in tum_vi_projection_matrices.txt. These matrices are the projection matrices of the left (P1) and right (P2) camera in the stereo setup after performing OpenCV cv.fisheye.stereoRectify method. The new projection matrix will be printed out by the stereo_to_depth_glob.py if used. For ZED camera, the ZED-SDK should print out the matrix during startup.
 
 The main script uses the left camera as the reference. Therefore, the corresponding parameters are:
 
@@ -35,5 +35,11 @@ More information can be found [here](https://www.cvlibs.net/datasets/karlsruhe_s
 ## Build libviso2 MATLAB wrapper
 Run the make.m script in MATLAB. The script is located at PHD-SLAM-TUMVI/libviso2/matlab/
 
-## PHD-SLAM STILL UNDER DEVELOPMENT
+## Build ANMS via SSC MATLAB warpper
+Navigate to PHD-SLAM-TUMVI/ssc in MATLAB. Run ```mex ssc.cpp```
+
+## Run PHD-SLAM script
+The main script is PHD_SLAM_TUM_VI.m
+
+## PHD-SLAM STILL UNDER DEVELOPMENT AND TESTING!!!
 

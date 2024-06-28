@@ -1,4 +1,5 @@
 function resample_id = low_variance_resample (w, L)
+    % Implementation of low variance resample
     r = randn(1)/L;
     resample_id = w;
     c = w(1);

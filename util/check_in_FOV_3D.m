@@ -1,4 +1,6 @@
 function [pos_diff_in_body, is_FOV] = check_in_FOV_3D(landmark, pos, quat, sensor)
+    % Function to return the landmark position in camera coordinate frame 
+    % and logical vector of wether it is in FOV or not
     % Range calc
     pos_diff = landmark - pos;
     range = vecnorm(pos_diff,2,1);

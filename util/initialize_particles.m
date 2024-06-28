@@ -1,4 +1,5 @@
 function p = initialize_particles(num_particles, init_pos, init_quat, meas_inworld, def_cov, def_inten)
+    % Initialize a particle set based on input parameters
     for i = 1:num_particles
         p(i).w = 1/num_particles;
         p(i).pos = init_pos;

@@ -1,4 +1,5 @@
 function R = quat2rot(quat,rotation_frame)
+    % Function to transform a quaternion to a rotation matrix
     arguments
         quat (:,4) {mustBeNumeric}
         rotation_frame {mustBeMember(rotation_frame,["frame", "point"])}

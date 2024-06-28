@@ -1,4 +1,3 @@
-
 function [GM_mu_out, GM_cov_out, GM_inten_out] = cleanup_PHD (GM_mu, ...
     GM_cov, GM_inten, pruning_thres, merge_dist, num_GM_cap)
     [mu_prune, cov_prune, inten_out] = prune_gm (GM_mu, GM_cov, GM_inten, pruning_thres);

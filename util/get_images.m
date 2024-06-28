@@ -1,4 +1,5 @@
 function [left_rectified_img, right_rectified_img, depth_map] = get_images(path_to_dataset, dataset_name, file_name, depth_factor)
+    % Helpher function to get images from TUM-VI dataset 
     left_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam0/rectified/',file_name,'.png');
     left_rectified_img = imread(left_rectified_name);
     right_rectified_name = strcat(path_to_dataset,dataset_name,'/mav0/cam1/rectified/',file_name,'.png');

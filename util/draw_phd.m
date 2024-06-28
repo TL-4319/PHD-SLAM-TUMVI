@@ -1,4 +1,6 @@
 function draw_phd(GM_mu, GM_cov, GM_inten,range,landmark,name)
+        % Helper function to draw the 2D PHD
+
         [X,Y,phd_surf] = phd2surf(GM_mu, GM_inten, GM_cov, ...
             range, range);
         s=surf(X,Y,phd_surf);

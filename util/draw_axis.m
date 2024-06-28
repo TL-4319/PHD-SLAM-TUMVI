@@ -1,4 +1,8 @@
 function draw_axis (pos, quat, fig_num, scale, linewidth)
+    % Helper function to plot a frame axis
+    % X is red
+    % Y is green
+    % B is blue
     % Rotate of principle axis
     rot_x = rotatepoint(quat, [1,0,0]) * scale;
     rot_y = rotatepoint(quat, [0,1,0]) * scale;

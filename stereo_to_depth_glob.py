@@ -199,11 +199,8 @@ if __name__ == '__main__':
     T_imu_cam0rect = T_imu_cam0 * T_cam0rect_cam0.inverse()
     T_imu_cam1rect = T_imu_cam1 * T_cam1rect_cam1.inverse()
 
-    print("T_imu_cam0rect", T_imu_cam0rect)
-    print("T_imu_cam1rect", T_imu_cam1rect)
-
-    print("new left K", left_projection)
-    print("new right k", right_projection)
+    print("new left P", left_projection)
+    print("new right P", right_projection)
 
     # see https://docs.opencv.org/4.5.0/d2/d85/classcv_1_1StereoSGBM.html
     # and https://answers.opencv.org/question/182049/pythonstereo-disparity-quality-problems/?answer=183650#post-id-183650
