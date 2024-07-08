@@ -402,5 +402,6 @@ simulation.odom = odom;
 simulation.viso_param = viso_param;
 simulation.filter_param = filter;
 simulation.filter = filter_est;
+simulation.time_vec = time_vec;
 
 save simulation.mat simulation
