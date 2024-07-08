@@ -60,23 +60,23 @@ odom_euler_error = odom_euler - true_euler;
 
 % Handle wrapping of angle error
 for ii = 1:size(euler_error,2)
-    if euler_error (1,ii) > pi
-        euler_error (1,ii) = euler_error (1,ii) - 2*pi;
+    if abs(euler_error (1,ii)) > pi
+        euler_error (1,ii) = euler_error (1,ii) - sign(euler_error (1,ii)) * 2*pi;
     end
-    if euler_error (2,ii) > pi
-        euler_error (2,ii) = euler_error (2,ii) - 2*pi;
+    if abs(euler_error (2,ii)) > pi
+        euler_error (2,ii) = euler_error (2,ii) - sign(euler_error (2,ii)) *  2*pi;
     end
-    if euler_error (3,ii) > pi
-        euler_error (3,ii) = euler_error (3,ii) - 2*pi;
+    if abs(euler_error (3,ii)) > pi
+        euler_error (3,ii) = euler_error (3,ii) - sign(euler_error (3,ii)) * 2*pi;
     end
-    if odom_euler_error (1,ii) > pi
-        odom_euler_error (1,ii) = odom_euler_error (1,ii) - 2*pi;
+    if abs(odom_euler_error (1,ii)) > pi
+        odom_euler_error (1,ii) = odom_euler_error (1,ii) - sign(odom_euler_error (1,ii)) * 2*pi;
     end
-    if odom_euler_error (2,ii) > pi
-        odom_euler_error (2,ii) = odom_euler_error (2,ii) - 2*pi;
+    if abs(odom_euler_error (2,ii)) > pi
+        odom_euler_error (2,ii) = odom_euler_error (2,ii) - sign(odom_euler_error (2,ii)) * 2*pi;
     end
-    if odom_euler_error (3,ii) > pi
-        odom_euler_error (3,ii) = odom_euler_error (3,ii) - 2*pi;
+    if abs(odom_euler_error (3,ii)) > pi
+        odom_euler_error (3,ii) = odom_euler_error (3,ii) - sign(odom_euler_error (3,ii)) * 2*pi;
     end
 end
 %% Plot
