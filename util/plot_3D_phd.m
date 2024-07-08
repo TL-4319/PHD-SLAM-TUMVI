@@ -17,6 +17,6 @@ function plot_3D_phd (map_est, sigma_mult, inten_cutoff, transparency)
         h = plot_gaussian_ellipsoid(map_est.max_likeli_gm_mu(:,ii),...
             map_est.max_likeli_gm_cov(:,:,ii)*sigma_mult, inten);
         set(h,'facealpha',transparency,'EdgeColor','none','FaceColor','flat')
-        clim([0,1.4])
+        clim([inten_cutoff,1.4])
     end
 end

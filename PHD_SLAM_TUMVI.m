@@ -12,8 +12,8 @@ title ("Visualization")
 fig1.Position = [1,1,2000,2000];
 
 %% Select data set
-path_to_dataset = '/home/tuan/Projects/tum-vi/';
-%path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
+%path_to_dataset = '/home/tuan/Projects/tum-vi/';
+path_to_dataset = '/mnt/external01/tuan_dataset/tum-vi/';
 dataset_name = 'dataset-room1_512_16';
 
 %% Preparing dataset. NO INPUT REQUIRED
@@ -143,17 +143,17 @@ FAST_params.min_quality = 0.05;
 FAST_params.min_contrast = 0.05;
 
 % ANMS 
-ANMS_params.max_num_point = 30;
+ANMS_params.max_num_point = 50;
 ANMS_params.tolerance = 0.1;
 
 %% Filter configuration
 % Particle Filter settings
 filter.num_particle = 1;
 filter.resample_threshold = 0.2; % Percentage of num_particle for resample to trigger
-filter.num_perfect_iter = 20; % Number of iteration that uses true pose. This is equavalent with starting out standing still and letting the map initialize
+filter.num_perfect_iter = 40; % Number of iteration that uses true pose. This is equavalent with starting out standing still and letting the map initialize
 
 % Motion covariance = [cov_x, cov_y, cov_z, cov_phi, cov_theta, cov_psi]
-filter.motion_sigma = [0.1; 0.1; 0.1; 0.025; 0.025; 0.025];
+filter.motion_sigma = [0.1; 0.1; 0.1; 0.03; 0.03; 0.03];
 
 % Sensor model
 % FOV are obtained using the the projection matrix focal lenght and
@@ -162,19 +162,19 @@ filter.sensor.HFOV = deg2rad(65.285 * 2);   % Horizontal FOV of sensor. This is 
 filter.sensor.VFOV = deg2rad(68.25 * 2);    % Vertical FOV of sensor. This is estimated as FOV after rectification using intrinsics
 filter.sensor.max_range = 6;                % Max range in depth map
 filter.sensor.min_range = 0.4;              % Min range in depth map
-filter.pixel_std = 2;                       % Standard deviation of the pixel location measurement error of landmark
-filter.depth_std = 0.7;                     % Standard deviation of the depth measurement error of landmark
-filter.clutter_intensity = 10 * 10^-4;      
-filter.detection_prob = 0.7;
+filter.pixel_std = 1;                       % Standard deviation of the pixel location measurement error of landmark
+filter.depth_std = 0.3;                     % Standard deviation of the depth measurement error of landmark
+filter.clutter_intensity = 2 * 10^-4;      
+filter.detection_prob = 0.6;
 
 % Map PHD config
-filter.birthGM_intensity = 0.3;             % Default intensity of GM component when birth
+filter.birthGM_intensity = 0.01;             % Default intensity of GM component when birth
 filter.birthGM_std = 0.02;                  % Default standard deviation in position of GM component when birth
-filter.map_std = 0.01;
+filter.map_std = 0.0;
 filter.adaptive_birth_dist_thres = 0.5;
 filter.GM_inten_thres = 0.4;                % Threshold to use a component for importance weight calc and plotting
-filter.pruning_thres = 10^-5;
-filter.merge_dist = 4;
+filter.pruning_thres = 10^-3;
+filter.merge_dist = 100;
 filter.num_GM_cap = 2000;
 
 % NO INPUT REQUIRED for the rest of the section
@@ -214,7 +214,7 @@ particle = initialize_particles (filter.num_particle, filter_est.pos(:,1), filte
 
 %% Plot first frame. NO INPUT REQUIRED
 % Preallocate cell for making video
-frame = cell(size(time_vec,2),1);
+frame = cell(round(size(time_vec,2)/2),1);
  % Grey image
  figure(1)
  subplot (2,2,1)
@@ -265,7 +265,7 @@ frame = cell(size(time_vec,2),1);
 total_timer = tic;
 
 %% Run loop NO INPUT REQUIRED
-for kk = 2:size(time_vec,2)
+for kk = 2:round(size(time_vec,2)/2)
     %
     iteration_timer = tic;
     %% Read images and pre-processing
@@ -308,7 +308,7 @@ for kk = 2:size(time_vec,2)
     filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,1);
     else
         particle = run_phd_slam (particle, odom_cmd, measurements_projective, ...
-    filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,0);
+    filter, dt, truth.pos(:,kk),truth.quat(kk), camera_intrinsic,1);
     end
 
     % Extract state and landmark estimates
@@ -321,7 +321,7 @@ for kk = 2:size(time_vec,2)
     particle = adaptive_birth_PHD (pose_est.pos, pose_est.quat, measurements_ned, map_est, filter, particle);
     
     % Resample (if needed)
-    [particle, filter_est.num_effective_particle] = resample_particles(particle, filter);
+    [particle, filter_est.num_effective_particle(kk)] = resample_particles(particle, filter);
     
     %% Project mapped features on to image frame
     reprojected_features = project_mapped_features_to_img(map_est, pose_est, camera_intrinsic, filter.sensor);
@@ -361,7 +361,7 @@ for kk = 2:size(time_vec,2)
     hold on
     scatter3(meas_in_world(1,:), meas_in_world(2,:), meas_in_world(3,:),'r.')
     scatter3(map_est.feature_pos(1,:),map_est.feature_pos(2,:),map_est.feature_pos(3,:),'+k')
-    plot_3D_phd(map_est,50,filter.GM_inten_thres,0.2)
+    plot_3D_phd(map_est,200,0,0.2)
     colorbar
     axis equal
     grid on
@@ -396,3 +396,11 @@ visualOdometryStereoMex('close');
 figure()
 plot (runtime)
 
+%% Consolidate data into 1 struct for saving
+simulation.truth = truth;
+simulation.odom = odom;
+simulation.viso_param = viso_param;
+simulation.filter_param = filter;
+simulation.filter = filter_est;
+
+save simulation.mat simulation
