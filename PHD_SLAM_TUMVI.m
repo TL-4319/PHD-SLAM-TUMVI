@@ -315,7 +315,7 @@ for kk = 2:round(size(time_vec,2)/2)
     [pose_est, map_est] = extract_estimates_max_likeli(particle);
     filter_est.pos(:,kk) = pose_est.pos;
     filter_est.quat(kk,:) = pose_est.quat;
-    filter_est.filter_est.num_map_features(kk) = map_est.exp_num_landmark;
+    filter_est.num_map_features(kk) = map_est.exp_num_landmark;
 
     % Adaptive birth PHD (Lin Gao's implementation)
     particle = adaptive_birth_PHD (pose_est.pos, pose_est.quat, measurements_ned, map_est, filter, particle);
