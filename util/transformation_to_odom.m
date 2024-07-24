@@ -3,11 +3,20 @@ function [trans_vel, rot_vel] = transformation_to_odom(Tr, dt)
     % estimates
     p = Tr(1:3,4);
     R = Tr(1:3, 1:3);
-
-    R_delta = R - eye(3);
-    wz = -R_delta(1,2)/dt;
-    wy = -R_delta(3,1)/dt;
-    wx = -R_delta(2,3)/dt;
+    
+    % Logarithmic map of relative transformation matrix to construct the
+    % skew symmetric matrix for average rotation rates
+    log_R = logm(R);
+    if ~isreal(log_R) || any(~isfinite(log_R),'all')
+        wz = 0;
+        wy = 0;
+        wx = 0;
+    else
+        wz = log_R(2,1)/dt;
+        wy = log_R(1,3)/dt;
+        wx = log_R(3,2)/dt;
+    end
+    
 
     trans_vel = p/dt;
     rot_vel = [wx; wy; wz];
